@@ -22,6 +22,7 @@ app.use(
     "/api/appointment",
     require("./routes/appointmentRoutes")
 );
+app.use("/api/review", require("./routes/reviewRoutes"));
 
 app.get("/", (req, res) => {
     res.send("Doctor Connect API Running...");

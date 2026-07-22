@@ -10,7 +10,11 @@ const ROLES = require("../constants/roles");
 
 const {
 
-    bookAppointment
+    bookAppointment,
+    getMyAppointments,
+    getDoctorAppointments,
+    updateAppointmentStatus,
+    cancelAppointment
 
 } = require("../controllers/appointmentController");
 
@@ -24,6 +28,39 @@ router.post(
 
     bookAppointment
 
+);
+
+router.get(
+    "/my-appointments",
+    authMiddleware,
+    roleMiddleware(ROLES.PATIENT),
+    getMyAppointments
+);
+
+router.get(
+    "/doctor",
+    authMiddleware,
+    roleMiddleware(ROLES.DOCTOR),
+    getDoctorAppointments
+);
+
+router.put(
+
+    "/status/:id",
+
+    authMiddleware,
+
+    roleMiddleware(ROLES.DOCTOR),
+
+    updateAppointmentStatus
+
+);
+
+router.put(
+    "/cancel/:id",
+    authMiddleware,
+    roleMiddleware(ROLES.PATIENT),
+    cancelAppointment
 );
 
 module.exports = router;

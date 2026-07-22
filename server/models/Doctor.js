@@ -74,7 +74,17 @@ const doctorSchema = new mongoose.Schema(
     slotDuration: {
         type: Number,
         default: 30
-    }
+    },
+
+    averageRating: {
+        type: Number,
+        default: 0
+    },
+
+    totalReviews: {
+        type: Number,
+        default: 0
+    },
 
 },
 {
