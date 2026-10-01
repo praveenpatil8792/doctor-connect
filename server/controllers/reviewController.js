@@ -1,347 +1,506 @@
 const Review = require("../models/Review");
 const Appointment = require("../models/Appointment");
 const Doctor = require("../models/Doctor");
-const updateDoctorRating = require("../utils/updateDoctorRating");
+
+// =====================================================
+// CREATE REVIEW
+// =====================================================
 
 const createReview = async (req, res) => {
-
     try {
-
         const {
             appointmentId,
             rating,
             comment
         } = req.body;
 
-        if (!appointmentId || !rating) {
-
+        // Validate appointment ID
+        if (!appointmentId) {
             return res.status(400).json({
                 success: false,
-                message: "Appointment ID and Rating are required"
+                message: "Appointment ID is required"
             });
+        }
 
+        // Validate rating
+        if (rating === undefined || rating === null) {
+            return res.status(400).json({
+                success: false,
+                message: "Rating is required"
+            });
         }
 
         if (rating < 1 || rating > 5) {
-
             return res.status(400).json({
                 success: false,
                 message: "Rating must be between 1 and 5"
             });
-
         }
 
-        const appointment = await Appointment.findById(appointmentId);
+        // Find appointment
+        const appointment = await Appointment.findById(
+            appointmentId
+        );
 
         if (!appointment) {
-
             return res.status(404).json({
                 success: false,
                 message: "Appointment not found"
             });
-
         }
 
-        // Only patient who booked
-
-        if (appointment.patient.toString() !== req.user.id) {
-
+        // Check appointment belongs to logged-in patient
+        if (
+            appointment.patient.toString() !==
+            req.user.id.toString()
+        ) {
             return res.status(403).json({
                 success: false,
-                message: "Access Forbidden"
+                message: "You are not allowed to review this appointment"
             });
-
         }
 
-        // Only completed appointments
-
-        if (appointment.status !== "Completed") {
-
+        // Review allowed only for Completed or Rejected
+        if (
+            appointment.status !== "Completed" &&
+            appointment.status !== "Rejected"
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Review allowed only after completed appointment"
+                message:
+                    "Review allowed only for completed or rejected appointments"
             });
-
         }
 
-        // Only one review
-
-        const existing = await Review.findOne({
+        // Check if review already exists
+        const existingReview = await Review.findOne({
             appointment: appointmentId
         });
 
-        if (existing) {
-
+        if (existingReview) {
             return res.status(400).json({
                 success: false,
                 message: "Review already submitted"
             });
-
         }
 
+        // Create review
         const review = await Review.create({
-
             appointment: appointmentId,
-
             doctor: appointment.doctor,
-
             patient: req.user.id,
-
-            rating,
-
-            comment
-
+            rating: Number(rating),
+            comment: comment || ""
         });
 
-        await updateDoctorRating(appointment.doctor);
+        // ---------------------------------------------
+        // RECALCULATE DOCTOR AVERAGE RATING
+        // ---------------------------------------------
 
-        res.status(201).json({
-
-            success: true,
-
-            message: "Review Submitted Successfully",
-
-            review
-
+        const doctorReviews = await Review.find({
+            doctor: appointment.doctor
         });
 
-    }
+        const totalRating = doctorReviews.reduce(
+            (sum, item) => sum + Number(item.rating),
+            0
+        );
 
+        const averageRating =
+            doctorReviews.length > 0
+                ? totalRating / doctorReviews.length
+                : 0;
 
-    catch (error) {
+        // ---------------------------------------------
+        // UPDATE DOCTOR
+        // ---------------------------------------------
 
-        res.status(500).json({
-
-            success: false,
-
-            message: error.message
-
-        });
-
-    }
-
-};
-
-// Update Review
-
-const updateReview = async (req, res) => {
-
-    try {
-
-        const { id } = req.params;
-
-        const { rating, comment } = req.body;
-
-        const review = await Review.findById(id);
-
-        if (!review) {
-
-            return res.status(404).json({
-                success: false,
-                message: "Review not found"
-            });
-
-        }
-
-        // Only review owner can update
-
-        if (review.patient.toString() !== req.user.id) {
-
-            return res.status(403).json({
-                success: false,
-                message: "Access Forbidden"
-            });
-
-        }
-
-        if (rating) {
-
-            if (rating < 1 || rating > 5) {
-
-                return res.status(400).json({
-                    success: false,
-                    message: "Rating must be between 1 and 5"
-                });
-
+        await Doctor.findByIdAndUpdate(
+            appointment.doctor,
+            {
+                averageRating: Number(
+                    averageRating.toFixed(1)
+                ),
+                totalReviews: doctorReviews.length
             }
+        );
 
-            review.rating = rating;
-        }
-
-        if (comment !== undefined) {
-            review.comment = comment;
-        }
-
-        await review.save();
-
-        // Recalculate doctor's rating
-
-        await updateDoctorRating(review.doctor);
-
-        res.status(200).json({
-
+        return res.status(201).json({
             success: true,
-            message: "Review Updated Successfully",
-            review
-
+            message: "Review submitted successfully",
+            review,
+            averageRating: Number(
+                averageRating.toFixed(1)
+            ),
+            totalReviews: doctorReviews.length
         });
 
     } catch (error) {
+        console.error(
+            "Create review error:",
+            error
+        );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: error.message
+            message: "Unable to create review"
         });
-
     }
-
 };
 
-// Delete Review
+
+// =====================================================
+// UPDATE REVIEW
+// =====================================================
+
+const updateReview = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const {
+            rating,
+            comment
+        } = req.body;
+
+        // Validate rating
+        if (rating === undefined || rating === null) {
+            return res.status(400).json({
+                success: false,
+                message: "Rating is required"
+            });
+        }
+
+        if (rating < 1 || rating > 5) {
+            return res.status(400).json({
+                success: false,
+                message: "Rating must be between 1 and 5"
+            });
+        }
+
+        // Find review
+        const review = await Review.findById(id);
+
+        if (!review) {
+            return res.status(404).json({
+                success: false,
+                message: "Review not found"
+            });
+        }
+
+        // Check review belongs to logged-in patient
+        if (
+            review.patient.toString() !==
+            req.user.id.toString()
+        ) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "You are not allowed to edit this review"
+            });
+        }
+
+        // ---------------------------------------------
+        // UPDATE THE REVIEW
+        // ---------------------------------------------
+
+        review.rating = Number(rating);
+        review.comment = comment || "";
+
+        await review.save();
+
+        // ---------------------------------------------
+        // GET ALL REVIEWS FOR THIS DOCTOR
+        // ---------------------------------------------
+
+        const doctorReviews = await Review.find({
+            doctor: review.doctor
+        });
+
+        // ---------------------------------------------
+        // CALCULATE NEW AVERAGE
+        // ---------------------------------------------
+
+        const totalRating = doctorReviews.reduce(
+            (sum, item) => sum + Number(item.rating),
+            0
+        );
+
+        const averageRating =
+            doctorReviews.length > 0
+                ? totalRating / doctorReviews.length
+                : 0;
+
+        // ---------------------------------------------
+        // UPDATE DOCTOR AVERAGE RATING
+        // ---------------------------------------------
+
+        await Doctor.findByIdAndUpdate(
+            review.doctor,
+            {
+                averageRating: Number(
+                    averageRating.toFixed(1)
+                ),
+                totalReviews: doctorReviews.length
+            }
+        );
+
+        // ---------------------------------------------
+        // SEND RESPONSE
+        // ---------------------------------------------
+
+        return res.status(200).json({
+            success: true,
+            message: "Review updated successfully",
+
+            review,
+
+            averageRating: Number(
+                averageRating.toFixed(1)
+            ),
+
+            totalReviews: doctorReviews.length
+        });
+
+    } catch (error) {
+        console.error(
+            "Update review error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to update review"
+        });
+    }
+};
+
+
+// =====================================================
+// DELETE REVIEW
+// =====================================================
 
 const deleteReview = async (req, res) => {
-
     try {
-
         const { id } = req.params;
 
         const review = await Review.findById(id);
 
         if (!review) {
-
             return res.status(404).json({
-
                 success: false,
-
                 message: "Review not found"
-
             });
-
         }
 
-        // Only review owner
-
-        if (review.patient.toString() !== req.user.id) {
-
+        // Check ownership
+        if (
+            review.patient.toString() !==
+            req.user.id.toString()
+        ) {
             return res.status(403).json({
-
                 success: false,
-
-                message: "Access Forbidden"
-
+                message:
+                    "You are not allowed to delete this review"
             });
-
         }
 
         const doctorId = review.doctor;
 
-        await review.deleteOne();
+        await Review.findByIdAndDelete(id);
 
-        await updateDoctorRating(doctorId);
+        // ---------------------------------------------
+        // RECALCULATE DOCTOR RATING
+        // ---------------------------------------------
 
-        res.status(200).json({
+        const doctorReviews = await Review.find({
+            doctor: doctorId
+        });
 
+        const totalRating = doctorReviews.reduce(
+            (sum, item) => sum + Number(item.rating),
+            0
+        );
+
+        const averageRating =
+            doctorReviews.length > 0
+                ? totalRating / doctorReviews.length
+                : 0;
+
+        await Doctor.findByIdAndUpdate(
+            doctorId,
+            {
+                averageRating: Number(
+                    averageRating.toFixed(1)
+                ),
+                totalReviews: doctorReviews.length
+            }
+        );
+
+        return res.status(200).json({
             success: true,
-
-            message: "Review Deleted Successfully"
-
+            message: "Review deleted successfully"
         });
 
-    }
+    } catch (error) {
+        console.error(
+            "Delete review error:",
+            error
+        );
 
-    catch (error) {
-
-        res.status(500).json({
-
+        return res.status(500).json({
             success: false,
-
-            message: error.message
-
+            message: "Unable to delete review"
         });
-
     }
-
 };
 
-// Get Doctor Reviews
+
+// =====================================================
+// GET DOCTOR REVIEWS
+// =====================================================
 
 const getDoctorReviews = async (req, res) => {
-
     try {
-
         const { doctorId } = req.params;
 
         const reviews = await Review.find({
-
             doctor: doctorId
-
         })
+            .populate(
+                "patient",
+                "name profileImage"
+            )
+            .populate(
+                "appointment",
+                "appointmentDate startTime"
+            )
+            .sort({ createdAt: -1 });
 
-        .populate("patient", "name profileImage")
-
-        .sort({
-
-            createdAt: -1
-
-        });
-
-        res.status(200).json({
-
+        return res.status(200).json({
             success: true,
-
-            totalReviews: reviews.length,
-
             reviews
-
         });
 
-    }
+    } catch (error) {
+        console.error(
+            "Get doctor reviews error:",
+            error
+        );
 
-    catch (error) {
-
-        res.status(500).json({
-
+        return res.status(500).json({
             success: false,
-
-            message: error.message
-
+            message: "Unable to get doctor reviews"
         });
-
     }
-
 };
 
+
+// =====================================================
+// GET MY REVIEWS
+// =====================================================
+
 const getMyReviews = async (req, res) => {
+    try {
+        const reviews = await Review.find({
+            patient: req.user.id
+        })
+            .populate(
+                "doctor",
+                "specialization averageRating totalReviews"
+            )
+            .populate(
+                "appointment",
+                "appointmentDate startTime status"
+            )
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            reviews
+        });
+
+    } catch (error) {
+        console.error(
+            "Get my reviews error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to get your reviews"
+        });
+    }
+};
+
+
+// =====================================================
+// GET LOGGED-IN DOCTOR REVIEWS
+// =====================================================
+
+const getLoggedInDoctorReviews = async (req, res) => {
 
     try {
 
-        const reviews = await Review.find({
-
-            patient: req.user.id
-
-        })
-
-        .populate({
-
-            path: "doctor",
-
-            populate: {
-
-                path: "user",
-
-                select: "name profileImage"
-
-            }
-
+        // Find doctor profile
+        const doctor = await Doctor.findOne({
+            user: req.user.id
         });
 
-        res.status(200).json({
+        if (!doctor) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message: "Doctor profile not found"
+
+            });
+
+        }
+
+
+        // Get reviews
+        const reviews = await Review.find({
+            doctor: doctor._id
+        })
+            .populate(
+                "patient",
+                "name profileImage"
+            )
+            .populate(
+                "appointment",
+                "appointmentDate startTime"
+            )
+            .sort({
+                createdAt: -1
+            });
+
+
+        // Calculate average rating
+        const totalRating = reviews.reduce(
+            (sum, review) =>
+                sum + Number(review.rating),
+            0
+        );
+
+
+        const averageRating =
+            reviews.length > 0
+                ? totalRating / reviews.length
+                : 0;
+
+
+        return res.status(200).json({
 
             success: true,
 
-            totalReviews: reviews.length,
+            reviews,
 
-            reviews
+            averageRating: Number(
+                averageRating.toFixed(1)
+            ),
+
+            totalReviews: reviews.length
 
         });
 
@@ -349,22 +508,32 @@ const getMyReviews = async (req, res) => {
 
     catch (error) {
 
-        res.status(500).json({
+        console.error(
+            "Get logged-in doctor reviews error:",
+            error
+        );
+
+        return res.status(500).json({
 
             success: false,
 
-            message: error.message
+            message: "Unable to get doctor reviews"
 
         });
 
     }
 
 };
+
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
     createReview,
     updateReview,
     deleteReview,
     getDoctorReviews,
-    getMyReviews
+    getMyReviews,
+    getLoggedInDoctorReviews
 };

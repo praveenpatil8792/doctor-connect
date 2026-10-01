@@ -1,4 +1,102 @@
 const Doctor = require("../models/Doctor");
+const User = require("../models/User");
+const cloudinary = require("../config/cloudinary");
+const Appointment = require("../models/Appointment");
+// const defaultAvailability = require("../constants/defaultAvailability");
+
+const defaultAvailability = [
+    {
+        day: "Monday",
+        sessions: [
+            {
+                startTime: "09:00",
+                endTime: "13:00"
+            },
+            {
+                startTime: "14:00",
+                endTime: "18:00"
+            }
+        ]
+    },
+    {
+        day: "Tuesday",
+        sessions: [
+            {
+                startTime: "09:00",
+                endTime: "13:00"
+            },
+            {
+                startTime: "14:00",
+                endTime: "18:00"
+            }
+        ]
+    },
+    {
+        day: "Wednesday",
+        sessions: [
+            {
+                startTime: "09:00",
+                endTime: "13:00"
+            },
+            {
+                startTime: "14:00",
+                endTime: "18:00"
+            }
+        ]
+    },
+    {
+        day: "Thursday",
+        sessions: [
+            {
+                startTime: "09:00",
+                endTime: "13:00"
+            },
+            {
+                startTime: "14:00",
+                endTime: "18:00"
+            }
+        ]
+    },
+    {
+        day: "Friday",
+        sessions: [
+            {
+                startTime: "09:00",
+                endTime: "13:00"
+            },
+            {
+                startTime: "14:00",
+                endTime: "18:00"
+            }
+        ]
+    },
+    {
+        day: "Saturday",
+        sessions: [
+            {
+                startTime: "09:00",
+                endTime: "13:00"
+            },
+            {
+                startTime: "14:00",
+                endTime: "18:00"
+            }
+        ]
+    },
+    {
+        day: "Sunday",
+        sessions: [
+            {
+                startTime: "09:00",
+                endTime: "13:00"
+            },
+            {
+                startTime: "14:00",
+                endTime: "18:00"
+            }
+        ]
+    }
+];
 
 // Create Doctor Profile
 
@@ -15,25 +113,27 @@ const createDoctorProfile = async (req, res) => {
             about
         } = req.body;
 
+        // Validate required fields FIRST
         if (
             !specialization ||
             !qualification ||
-            !experience ||
-            !consultationFee
+            experience === undefined ||
+            experience === null ||
+            consultationFee === undefined ||
+            consultationFee === null
         ) {
 
             return res.status(400).json({
 
-                success:false,
+                success: false,
 
-                message:"Please fill all required fields"
+                message: "Please fill all required fields"
 
             });
 
         }
 
         // Check if profile already exists
-
         const existingDoctor = await Doctor.findOne({
             user: req.user.id
         });
@@ -41,12 +141,16 @@ const createDoctorProfile = async (req, res) => {
         if (existingDoctor) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Doctor profile already exists"
+
             });
 
         }
 
+        // Create doctor with default availability
         const doctor = await Doctor.create({
 
             user: req.user.id,
@@ -61,14 +165,22 @@ const createDoctorProfile = async (req, res) => {
 
             hospital,
 
-            about
+            about,
+
+            // Default weekly schedule
+            availability: defaultAvailability,
+
+            // 30 minute slots
+            slotDuration: 30
 
         });
 
         res.status(201).json({
 
             success: true,
+
             message: "Doctor Profile Created",
+
             doctor
 
         });
@@ -80,6 +192,7 @@ const createDoctorProfile = async (req, res) => {
         res.status(500).json({
 
             success: false,
+
             message: error.message
 
         });
@@ -169,6 +282,83 @@ const updateDoctorProfile = async (req, res) => {
         });
 
     } catch (error) {
+
+        res.status(500).json({
+
+            success: false,
+
+            message: error.message
+
+        });
+
+    }
+
+};
+
+// Upload Doctor Profile Photo
+
+const uploadProfilePhoto = async (req, res) => {
+
+    try {
+
+        // No file uploaded
+        if (!req.file) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Please upload an image"
+            });
+
+        }
+
+        // Find logged-in user
+        const user = await User.findById(req.user.id);
+
+        if (!user) {
+
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+
+        }
+
+        // Delete old image if it exists
+        if (
+            user.profileImage &&
+            user.profileImage.public_id
+        ) {
+
+            await cloudinary.uploader.destroy(
+                user.profileImage.public_id
+            );
+
+        }
+
+        // Save new image
+        user.profileImage = {
+
+            url: req.file.path,
+
+            public_id: req.file.filename
+
+        };
+
+        await user.save();
+
+        res.status(200).json({
+
+            success: true,
+
+            message: "Profile Photo Uploaded Successfully",
+
+            profileImage: user.profileImage
+
+        });
+
+    }
+
+    catch (error) {
 
         res.status(500).json({
 
@@ -368,6 +558,575 @@ const updateAvailability = async (req, res) => {
 
 };
 
+const getAvailability = async (req, res) => {
+
+    try {
+
+        const doctor = await Doctor.findOne({
+            user: req.user.id
+        });
+
+        if (!doctor) {
+            return res.status(404).json({
+                success: false,
+                message: "Doctor profile not found"
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            availability: doctor.availability,
+            slotDuration: doctor.slotDuration
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+
+    }
+};
+
+const getDoctorSlots = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const { date } = req.query;
+
+
+        // =====================================================
+        // 1. Validate date
+        // =====================================================
+
+        if (!date) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Date is required"
+
+            });
+
+        }
+
+
+        // =====================================================
+        // Date must be YYYY-MM-DD
+        // =====================================================
+
+        const datePattern =
+            /^\d{4}-\d{2}-\d{2}$/;
+
+
+        if (!datePattern.test(date)) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Invalid date format. Use YYYY-MM-DD"
+
+            });
+
+        }
+
+
+        // =====================================================
+        // 2. Validate actual calendar date
+        // =====================================================
+
+        const [year, month, day] =
+            date.split("-").map(Number);
+
+
+        const selectedDate = new Date(
+            year,
+            month - 1,
+            day
+        );
+
+
+        if (
+
+            selectedDate.getFullYear() !== year ||
+
+            selectedDate.getMonth() !== month - 1 ||
+
+            selectedDate.getDate() !== day
+
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Invalid date"
+
+            });
+
+        }
+
+
+        // =====================================================
+        // 3. Get today's date
+        // =====================================================
+
+        const now = new Date();
+
+
+        const todayYear =
+            now.getFullYear();
+
+        const todayMonth =
+            now.getMonth();
+
+        const todayDay =
+            now.getDate();
+
+
+        const today = new Date(
+
+            todayYear,
+
+            todayMonth,
+
+            todayDay
+
+        );
+
+
+        // =====================================================
+        // 4. DO NOT RETURN SLOTS FOR PAST DATES
+        // =====================================================
+
+        if (selectedDate < today) {
+
+            return res.status(200).json({
+
+                success: true,
+
+                date,
+
+                slots: [],
+
+                message:
+                    "Appointments cannot be booked for a past date."
+
+            });
+
+        }
+
+
+        // =====================================================
+        // 5. Find doctor
+        // =====================================================
+
+        const doctor =
+            await Doctor.findById(id);
+
+
+        if (!doctor) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message: "Doctor not found"
+
+            });
+
+        }
+
+
+        // =====================================================
+        // 6. Check doctor availability
+        // =====================================================
+
+        if (
+
+            !doctor.availability ||
+
+            doctor.availability.length === 0
+
+        ) {
+
+            return res.status(200).json({
+
+                success: true,
+
+                slots: [],
+
+                message:
+                    "Doctor has not configured availability"
+
+            });
+
+        }
+
+
+        // =====================================================
+        // 7. Get day name
+        // =====================================================
+
+        const dayName =
+            selectedDate.toLocaleDateString(
+                "en-US",
+                {
+                    weekday: "long"
+                }
+            );
+
+
+        // =====================================================
+        // 8. Find availability for selected day
+        // =====================================================
+
+        const dayAvailability =
+            doctor.availability.find(
+
+                item =>
+                    item.day === dayName
+
+            );
+
+
+        if (!dayAvailability) {
+
+            return res.status(200).json({
+
+                success: true,
+
+                slots: [],
+
+                message:
+                    `Doctor is not available on ${dayName}`
+
+            });
+
+        }
+
+
+        // =====================================================
+        // 9. Check sessions
+        // =====================================================
+
+        if (
+
+            !dayAvailability.sessions ||
+
+            dayAvailability.sessions.length === 0
+
+        ) {
+
+            return res.status(200).json({
+
+                success: true,
+
+                slots: [],
+
+                message:
+                    `Doctor has no sessions configured for ${dayName}`
+
+            });
+
+        }
+
+
+        // =====================================================
+        // 10. Generate slots
+        // =====================================================
+
+        let slots = [];
+
+
+        for (
+            const session
+            of dayAvailability.sessions
+        ) {
+
+            if (
+
+                !session.startTime ||
+
+                !session.endTime
+
+            ) {
+
+                continue;
+
+            }
+
+
+            let [
+                hour,
+                minute
+            ] = session.startTime
+                .split(":")
+                .map(Number);
+
+
+            const [
+                endHour,
+                endMinute
+            ] = session.endTime
+                .split(":")
+                .map(Number);
+
+
+            const sessionEndMinutes =
+                endHour * 60 +
+                endMinute;
+
+
+            while (true) {
+
+                const currentMinutes =
+                    hour * 60 +
+                    minute;
+
+
+                if (
+                    currentMinutes >=
+                    sessionEndMinutes
+                ) {
+
+                    break;
+
+                }
+
+
+                const nextMinutes =
+                    currentMinutes +
+                    doctor.slotDuration;
+
+
+                if (
+                    nextMinutes >
+                    sessionEndMinutes
+                ) {
+
+                    break;
+
+                }
+
+
+                const slot =
+                    `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+
+
+                slots.push(slot);
+
+
+                hour =
+                    Math.floor(
+                        nextMinutes / 60
+                    );
+
+
+                minute =
+                    nextMinutes % 60;
+
+            }
+
+        }
+
+
+        // =====================================================
+        // 11. Remove duplicate slots
+        // =====================================================
+
+        slots = [
+            ...new Set(slots)
+        ];
+
+
+        // =====================================================
+        // 12. If selected date is TODAY,
+        //     remove slots that have already passed
+        // =====================================================
+
+        if (
+
+            selectedDate.getFullYear() ===
+                todayYear &&
+
+            selectedDate.getMonth() ===
+                todayMonth &&
+
+            selectedDate.getDate() ===
+                todayDay
+
+        ) {
+
+            const currentHour =
+                now.getHours();
+
+            const currentMinute =
+                now.getMinutes();
+
+
+            const currentTimeMinutes =
+                currentHour * 60 +
+                currentMinute;
+
+
+            slots = slots.filter(
+                (slot) => {
+
+                    const [
+                        slotHour,
+                        slotMinute
+                    ] = slot
+                        .split(":")
+                        .map(Number);
+
+
+                    const slotMinutes =
+                        slotHour * 60 +
+                        slotMinute;
+
+
+                    return (
+                        slotMinutes >
+                        currentTimeMinutes
+                    );
+
+                }
+            );
+
+        }
+
+
+        // =====================================================
+        // 13. Get appointments for selected date
+        // =====================================================
+
+        const startOfDay =
+            new Date(
+                year,
+                month - 1,
+                day,
+                0,
+                0,
+                0,
+                0
+            );
+
+
+        const endOfDay =
+            new Date(
+                year,
+                month - 1,
+                day,
+                23,
+                59,
+                59,
+                999
+            );
+
+
+        const appointments =
+            await Appointment.find({
+
+                doctor: id,
+
+                appointmentDate: {
+
+                    $gte: startOfDay,
+
+                    $lte: endOfDay
+
+                },
+
+                status: {
+
+                    $nin: [
+
+                        "Rejected",
+
+                        "Cancelled"
+
+                    ]
+
+                }
+
+            });
+
+
+        // =====================================================
+        // 14. Get booked slots
+        // =====================================================
+
+        const bookedSlots =
+            appointments.map(
+
+                appointment =>
+                    appointment.startTime
+
+            );
+
+
+        // =====================================================
+        // 15. Remove booked slots
+        // =====================================================
+
+        const availableSlots =
+            slots.filter(
+
+                slot =>
+                    !bookedSlots.includes(slot)
+
+            );
+
+
+        // =====================================================
+        // 16. Return available slots
+        // =====================================================
+
+        return res.status(200).json({
+
+            success: true,
+
+            date,
+
+            day: dayName,
+
+            slotDuration:
+                doctor.slotDuration,
+
+            slots:
+                availableSlots
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Get Doctor Slots Error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                error.message
+
+        });
+
+    }
+
+};
+
 
 module.exports = {
     createDoctorProfile,
@@ -376,5 +1135,9 @@ module.exports = {
     getAllDoctors,
     getDoctorById,
     deleteDoctorProfile,
-    updateAvailability
+    getAvailability,
+    updateAvailability,
+    uploadProfilePhoto,
+    getDoctorSlots
+    
 };

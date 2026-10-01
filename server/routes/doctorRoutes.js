@@ -5,6 +5,7 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 const ROLES = require("../constants/roles");
+const upload = require("../middleware/uploadMiddleware");
 
 const {
     createDoctorProfile,
@@ -13,7 +14,10 @@ const {
     getAllDoctors,
     getDoctorById,
     deleteDoctorProfile,
-    updateAvailability
+    getAvailability,
+    updateAvailability,
+    uploadProfilePhoto,
+    getDoctorSlots
 } = require("../controllers/doctorController");
 
 router.post(
@@ -39,6 +43,12 @@ router.put(
 
 router.get("/all", getAllDoctors);
 
+router.get(
+    "/:id/slots",
+    getDoctorSlots
+);
+
+
 router.get("/:id", getDoctorById);
 
 router.delete(
@@ -59,5 +69,34 @@ router.put(
     updateAvailability
 
 );
+
+// #swagger.tags = ['Doctors']
+// #swagger.summary = 'Upload Doctor Profile Photo'
+// #swagger.consumes = ['multipart/form-data']
+// #swagger.security = [{
+//     "BearerAuth":[]
+// }]
+
+router.put(
+
+    "/upload-photo",
+
+    authMiddleware,
+
+    roleMiddleware(ROLES.DOCTOR),
+
+    upload.single("profileImage"),
+
+    uploadProfilePhoto
+
+);
+
+router.get(
+    "/availability",
+    authMiddleware,
+    roleMiddleware(ROLES.DOCTOR),
+    getAvailability
+);
+
 
 module.exports = router;

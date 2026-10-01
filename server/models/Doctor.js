@@ -61,13 +61,19 @@ const doctorSchema = new mongoose.Schema(
                 ]
             },
 
-            startTime: {
-                type: String
-            },
+            sessions: [
+                {
+                    startTime: {
+                        type: String,
+                        required: true
+                    },
 
-            endTime: {
-                type: String
-            }
+                    endTime: {
+                        type: String,
+                        required: true
+                    }
+                }
+            ]
         }
     ],
 
@@ -77,14 +83,14 @@ const doctorSchema = new mongoose.Schema(
     },
 
     averageRating: {
-        type: Number,
-        default: 0
+         type: Number,
+         default: 0
     },
 
     totalReviews: {
         type: Number,
         default: 0
-    },
+    }
 
 },
 {

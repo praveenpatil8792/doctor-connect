@@ -18,6 +18,12 @@ const {
 
 } = require("../controllers/appointmentController");
 
+// #swagger.tags = ['Appointments']
+// #swagger.summary = 'Book Appointment'
+// #swagger.security = [{
+//     "BearerAuth": []
+// }]
+
 router.post(
 
     "/book",

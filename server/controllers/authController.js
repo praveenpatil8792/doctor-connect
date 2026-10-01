@@ -2,13 +2,28 @@ const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const generateToken = require("../utils/generateToken");
 const validator = require("validator");
+const Doctor = require("../models/Doctor");
 const ROLES = require("../constants/roles");
 
 // Register User
 const register = async (req, res) => {
     try {
 
-        const { name, email, password, role, phone } = req.body;
+        const {
+            name,
+            email,
+            password,
+            role,
+            phone,
+
+            qualification,
+            specialization,
+            experience,
+            consultationFee,
+            hospital,
+            about
+
+        } = req.body;
 
         if (!name || !email || !password) {
             return res.status(400).json({
@@ -36,33 +51,82 @@ const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = await User.create({
-              name,
-              email,
-              password: hashedPassword,
-              role: role || ROLES.PATIENT,
-              phone
+
+            name,
+            email,
+            password: hashedPassword,
+            role: role || ROLES.PATIENT,
+            phone
+
         });
 
+        // Create doctor profile if role is doctor
+
+        if (user.role === ROLES.DOCTOR) {
+
+            await Doctor.create({
+
+                user: user._id,
+
+                specialization,
+
+                qualification,
+
+                experience,
+
+                consultationFee,
+
+                hospital,
+
+                about,
+
+                available: true,
+
+                slotDuration: 30,
+
+                averageRating: 0,
+
+                totalReviews: 0
+
+            });
+
+        }
+
         const userResponse = {
+
             _id: user._id,
+
             name: user.name,
+
             email: user.email,
+
             role: user.role,
+
             phone: user.phone,
+
             profileImage: user.profileImage
+
         };
 
         res.status(201).json({
-             success: true,
-              message: "Registration Successful",
-             user: userResponse
+
+            success: true,
+
+            message: "Registration Successful",
+
+            user: userResponse
+
         });
 
-    } catch (error) {
+    }
+    catch (error) {
 
         res.status(500).json({
+
             success: false,
+
             message: error.message
+
         });
 
     }

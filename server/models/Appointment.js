@@ -33,19 +33,29 @@ const appointmentSchema = new mongoose.Schema(
         },
 
         startTime: {
+
             type: String,
+
             required: true
+
         },
 
         endTime: {
-             type: String,
-             required: true
+
+            type: String,
+
+            required: true
+
         },
 
         mode: {
+
             type: String,
+
             enum: ["Online", "Offline"],
+
             default: "Offline"
+
         },
 
         reason: {
@@ -57,16 +67,49 @@ const appointmentSchema = new mongoose.Schema(
         },
 
         status: {
-             type: String,
+
+            type: String,
+
             enum: [
-                 "Pending",
+                "Pending",
                 "Accepted",
-                 "Rejected",
+                "Rejected",
                 "Completed",
-                "Cancelled"
+                "Cancelled",
+                "Expired",
+                "Patient No-Show",
+                "Doctor No-Show"
             ],
+
+            default: "Pending"
+
+        },
+
+        paymentStatus: {
+             type: String,
+             enum: [
+                 "Pending",
+                 "Paid",
+                 "Failed",
+                 "Refunded"
+             ],
             default: "Pending"
         },
+
+        paymentAmount: {
+             type: Number,
+             default: 0
+        },
+
+        razorpayOrderId: {
+             type: String,
+             default: ""
+        },
+
+        razorpayPaymentId: {
+             type: String,
+             default: ""
+        }
 
     },
 
@@ -76,6 +119,21 @@ const appointmentSchema = new mongoose.Schema(
 
     }
 
+);
+
+// ===========================
+// Prevent Duplicate Booking
+// ===========================
+
+appointmentSchema.index(
+    {
+        doctor: 1,
+        appointmentDate: 1,
+        startTime: 1
+    },
+    {
+        unique: true
+    }
 );
 
 module.exports = mongoose.model(
