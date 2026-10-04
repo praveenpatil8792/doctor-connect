@@ -7,6 +7,29 @@ import {
 } from "../services/appointmentService";
 
 
+
+const canCompleteAppointment = (appointment) => {
+
+    const appointmentDate =
+        new Date(appointment.appointmentDate);
+
+    const [hours, minutes] =
+        appointment.startTime
+            .split(":")
+            .map(Number);
+
+    appointmentDate.setHours(
+        hours,
+        minutes,
+        0,
+        0
+    );
+
+    return new Date() >= appointmentDate;
+};
+
+
+
 export default function DoctorDashboard() {
 
     const [appointments, setAppointments] = useState([]);
@@ -297,25 +320,43 @@ export default function DoctorDashboard() {
                                         ========================= */}
 
                                         {appointment.status ===
-                                            "Accepted" && (
+                                             "Accepted" && (
 
-                                            <button
-                                                onClick={() =>
-                                                    updateStatus(
-                                                        appointment._id,
-                                                        "Completed"
-                                                    )
+                                             <button
+                                                 onClick={() =>
+                                                     updateStatus(
+                                                         appointment._id,
+                                                         "Completed"
+                                                     )
                                                 }
-                                                className="
-                                                    bg-blue-600
-                                                    text-white
-                                                    px-3
-                                                    py-1
-                                                    rounded
-                                                "
-                                            >
-                                                Complete
-                                            </button>
+                                                disabled={
+                                                     !canCompleteAppointment(
+                                                     appointment
+                                                )
+                                            }
+                                            className={`
+                                                 text-white
+                                                 px-3
+                                                 py-1
+                                                 rounded
+                                                 ${
+                                                     canCompleteAppointment(
+                                                         appointment
+                                                     )
+                                                     ? "bg-blue-600 hover:bg-blue-700"
+                                                     : "bg-gray-400 cursor-not-allowed"
+                                                 }
+                                            `}
+                                             >
+                                             {
+                                             canCompleteAppointment(
+                                                appointment
+                                             )
+                                             ? "Complete"
+                                             : "Available at " +
+                                             appointment.startTime
+                                        }
+                                        </button>
 
                                         )}
 

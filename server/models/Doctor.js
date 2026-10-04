@@ -32,6 +32,15 @@ const doctorSchema = new mongoose.Schema(
         type: String
     },
 
+    location: {
+        address: { type: String, default: "" },
+        city: { type: String, default: "" },
+        state: { type: String, default: "" },
+        pincode: { type: String, default: "" },
+        latitude: { type: Number, min: -90, max: 90, default: null },
+        longitude: { type: Number, min: -180, max: 180, default: null }
+    },
+
     about: {
         type: String
     },

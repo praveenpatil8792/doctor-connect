@@ -19,6 +19,7 @@ import WriteReview from "../pages/WriteReview";
 import MyReviews from "../pages/MyReviews";
 import DoctorReviews from "../pages/DoctorReviews";
 import DoctorEarnings from "../pages/DoctorEarnings";
+import DoctorLocation from "../pages/DoctorLocation";
 
 export default function AppRoutes() {
     return (
@@ -82,6 +83,10 @@ export default function AppRoutes() {
             <Route
                   path="/doctor/earnings"
                   element={<DoctorEarnings />}
+            />
+            <Route
+                  path="/doctor/location"
+                  element={<DoctorLocation />}
             />
             <Route
                   path="/doctor/availability"

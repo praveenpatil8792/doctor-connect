@@ -70,6 +70,9 @@ const authSlice=createSlice({
 
             localStorage.removeItem("token");
 
+            sessionStorage.removeItem("doctorConnectPatientLocation");
+            sessionStorage.removeItem("doctorConnectLocationPromptShown");
+
         }
 
     }

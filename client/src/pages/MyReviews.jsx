@@ -64,7 +64,6 @@ export default function MyReviews() {
                                 key={review._id}
                                 className="bg-white border rounded-xl p-6 shadow-sm"
                             >
-
                                 <h2 className="text-xl font-semibold">
                                     Dr. {review.doctor?.user?.name}
                                 </h2>

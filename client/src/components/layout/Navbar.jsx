@@ -145,6 +145,17 @@ export default function Navbar() {
                                    </NavLink>
 
                                    <NavLink
+                                         to="/doctor/location"
+                                         className={({ isActive }) =>
+                                         isActive
+                                         ? "text-blue-600 font-semibold"
+                                         : "hover:text-blue-600"
+                                        }
+                                    >
+                                    Hospital Location
+                                   </NavLink>
+
+                                   <NavLink
                                          to="/doctor/earnings"
                                          className={({ isActive }) =>
                                          isActive

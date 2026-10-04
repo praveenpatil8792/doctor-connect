@@ -404,10 +404,14 @@ const getMyReviews = async (req, res) => {
         const reviews = await Review.find({
             patient: req.user.id
         })
-            .populate(
-                "doctor",
-                "specialization averageRating totalReviews"
-            )
+            .populate({
+                path: "doctor",
+                select: "user specialization averageRating totalReviews",
+                populate: {
+                    path: "user",
+                    select: "name email profileImage"
+                }
+            })
             .populate(
                 "appointment",
                 "appointmentDate startTime status"

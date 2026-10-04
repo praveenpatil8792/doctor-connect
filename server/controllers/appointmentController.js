@@ -1,5 +1,6 @@
 const Appointment = require("../models/Appointment");
 const Doctor = require("../models/Doctor");
+const { refundAppointmentPayment } = require("../services/refundService");
 
 
 const updateExpiredAppointments = async () => {
@@ -817,9 +818,7 @@ const updateAppointmentStatus = async (req, res) => {
     try {
 
         const { id } = req.params;
-
         const { status } = req.body;
-
 
         // =================================================
         // Allowed statuses that doctor can set
@@ -833,64 +832,40 @@ const updateAppointmentStatus = async (req, res) => {
             "Doctor No-Show"
         ];
 
-
         if (!allowedStatuses.includes(status)) {
-
             return res.status(400).json({
-
                 success: false,
-
                 message: "Invalid Appointment Status"
-
             });
-
         }
-
 
         // =================================================
         // Find Doctor Profile
         // =================================================
 
         const doctor = await Doctor.findOne({
-
             user: req.user.id
-
         });
 
-
         if (!doctor) {
-
             return res.status(404).json({
-
                 success: false,
-
                 message: "Doctor profile not found"
-
             });
-
         }
-
 
         // =================================================
         // Find Appointment
         // =================================================
 
-        const appointment =
-            await Appointment.findById(id);
-
+        const appointment = await Appointment.findById(id);
 
         if (!appointment) {
-
             return res.status(404).json({
-
                 success: false,
-
                 message: "Appointment not found"
-
             });
-
         }
-
 
         // =================================================
         // Check Ownership
@@ -900,24 +875,49 @@ const updateAppointmentStatus = async (req, res) => {
             appointment.doctor.toString() !==
             doctor._id.toString()
         ) {
-
             return res.status(403).json({
-
                 success: false,
-
                 message: "Access Forbidden"
-
             });
-
         }
 
+        // =================================================
+        // COMPLETION TIME VALIDATION
+        // =================================================
+
+        if (status === "Completed") {
+
+            const appointmentDate =
+                new Date(appointment.appointmentDate);
+
+            const [hours, minutes] =
+                appointment.startTime
+                    .split(":")
+                    .map(Number);
+
+            appointmentDate.setHours(
+                hours,
+                minutes,
+                0,
+                0
+            );
+
+            const now = new Date();
+
+            if (now < appointmentDate) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        `This appointment cannot be marked as completed before ${appointment.startTime}.`
+                });
+            }
+        }
 
         // =================================================
         // Valid Status Transitions
         // =================================================
 
         const validTransitions = {
-
             Pending: [
                 "Accepted",
                 "Rejected"
@@ -934,83 +934,101 @@ const updateAppointmentStatus = async (req, res) => {
             ],
 
             Rejected: [],
-
             Completed: [],
-
             Cancelled: [],
-
             "Patient No-Show": [],
-
             "Doctor No-Show": []
-
         };
-
-
-        // =================================================
-        // Check whether transition is allowed
-        // =================================================
 
         if (
             !validTransitions[appointment.status] ||
             !validTransitions[appointment.status].includes(status)
         ) {
-
             return res.status(400).json({
-
                 success: false,
-
                 message:
                     `Cannot change appointment from ${appointment.status} to ${status}`
-
             });
-
         }
 
-
         // =================================================
-        // Update Status
+        // UPDATE STATUS
         // =================================================
 
         appointment.status = status;
-
         await appointment.save();
 
-
         // =================================================
-        // Success Response
+        // REFUND
+        // =================================================
+        // Doctor rejection and Doctor No-Show both receive
+        // a 100% refund.
+        //
+        // Patient No-Show receives no refund.
+        // Completed receives no refund.
         // =================================================
 
-        res.status(200).json({
+        let refundMessage = "";
 
+        if (
+            status === "Rejected" ||
+            status === "Doctor No-Show"
+        ) {
+
+            const refundedAppointment =
+                await refundAppointmentPayment(
+                    appointment._id
+                );
+
+            if (
+                refundedAppointment.refundStatus ===
+                "Processed"
+            ) {
+                refundMessage =
+                    " Full refund processed successfully.";
+            } else if (
+                refundedAppointment.refundStatus ===
+                "Pending"
+            ) {
+                refundMessage =
+                    " Full refund has been initiated and is currently processing.";
+            } else if (
+                refundedAppointment.refundStatus ===
+                "Failed"
+            ) {
+                refundMessage =
+                    " The appointment is marked correctly, but the refund could not be processed yet.";
+            }
+
+            return res.status(200).json({
+                success: true,
+                message:
+                    `Appointment ${status}.${refundMessage}`,
+                appointment: refundedAppointment
+            });
+        }
+
+        return res.status(200).json({
             success: true,
-
-            message:
-                `Appointment ${status}`,
-
+            message: `Appointment ${status}`,
             appointment
-
         });
 
-    }
-
-    catch (error) {
+    } catch (error) {
 
         console.error(
             "Update Appointment Status Error:",
             error
         );
 
-        res.status(500).json({
-
+        return res.status(500).json({
             success: false,
-
             message: error.message
-
         });
-
     }
 
 };
+
 // Cancel Appointment
 
 const cancelAppointment = async (req, res) => {

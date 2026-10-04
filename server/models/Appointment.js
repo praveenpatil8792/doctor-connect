@@ -86,14 +86,51 @@ const appointmentSchema = new mongoose.Schema(
         },
 
         paymentStatus: {
-             type: String,
-             enum: [
-                 "Pending",
-                 "Paid",
-                 "Failed",
-                 "Refunded"
-             ],
+            type: String,
+            enum: [
+                "Pending",
+                "Paid",
+                "Failed",
+                "Refunding in Progress",
+                "Refunded"
+            ],
             default: "Pending"
+        },
+
+        refundStatus: {
+            type: String,
+            enum: [
+                "None",
+                "Pending",
+                "Processed",
+                "Failed"
+            ],
+            default: "None"
+        },
+
+        refundId: {
+            type: String,
+            default: ""
+        },
+
+        refundAmount: {
+            type: Number,
+            default: 0
+        },
+
+        refundInitiatedAt: {
+            type: Date,
+            default: null
+        },
+
+        refundProcessedAt: {
+            type: Date,
+            default: null
+        },
+
+        refundFailureReason: {
+            type: String,
+            default: ""
         },
 
         paymentAmount: {

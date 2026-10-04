@@ -17,7 +17,8 @@ const {
     getAvailability,
     updateAvailability,
     uploadProfilePhoto,
-    getDoctorSlots
+    getDoctorSlots,
+    updateHospitalLocation
 } = require("../controllers/doctorController");
 
 router.post(
@@ -41,11 +42,20 @@ router.put(
     updateDoctorProfile
 );
 
+
+router.put(
+    "/location",
+    authMiddleware,
+    roleMiddleware(ROLES.DOCTOR),
+    updateHospitalLocation
+);
+
 router.get("/all", getAllDoctors);
 
 router.get(
     "/:id/slots",
-    getDoctorSlots
+    getDoctorSlots,
+    updateHospitalLocation
 );
 
 

@@ -3,11 +3,23 @@ const crypto = require("crypto");
 
 const Appointment = require("../models/Appointment");
 const Doctor = require("../models/Doctor");
+const { refundAppointmentPayment } = require("../services/refundService");
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
     key_secret: process.env.RAZORPAY_KEY_SECRET
 });
+
+const calculateEndTime = (startTime, slotDuration) => {
+
+    const [hours, minutes] = startTime.split(":").map(Number);
+    const totalMinutes = hours * 60 + minutes + Number(slotDuration || 30);
+
+    const endHour = Math.floor(totalMinutes / 60);
+    const endMinute = totalMinutes % 60;
+
+    return `${String(endHour).padStart(2, "0")}:${String(endMinute).padStart(2, "0")}`;
+};
 
 
 // =====================================================
@@ -105,6 +117,12 @@ const createPaymentOrder = async (req, res) => {
         }
 
 
+        const endTime = calculateEndTime(
+            startTime,
+            doctor.slotDuration
+        );
+
+
         // -------------------------------------------------
         // Convert amount to paise
         // -------------------------------------------------
@@ -137,12 +155,21 @@ const createPaymentOrder = async (req, res) => {
                     startTime:
                         startTime,
 
+                    endTime:
+                        endTime,
+
                     patientId:
                         req.user.id
                 }
             });
 
-
+           console.log("========== RAZORPAY TEST ==========");
+           console.log("Key ID:", process.env.RAZORPAY_KEY_ID);
+           console.log("Order ID:", razorpayOrder.id);
+console.log("Amount:", razorpayOrder.amount);
+console.log("Currency:", razorpayOrder.currency);
+console.log("Status:", razorpayOrder.status);
+console.log("==================================");
         // -------------------------------------------------
         // Return order details
         // -------------------------------------------------
@@ -168,6 +195,8 @@ const createPaymentOrder = async (req, res) => {
             appointmentDate,
 
             startTime,
+
+            endTime,
 
             mode:
                 mode || "Offline",
@@ -317,6 +346,12 @@ const verifyPayment = async (req, res) => {
         }
 
 
+        const endTime = calculateEndTime(
+            startTime,
+            doctor.slotDuration
+        );
+
+
         // -------------------------------------------------
         // IMPORTANT:
         // Check slot again AFTER payment.
@@ -352,23 +387,45 @@ const verifyPayment = async (req, res) => {
 
         if (existingAppointment) {
 
-            // Payment succeeded but slot is no longer
-            // available.
-            //
-            // Later we should automatically refund this
-            // payment through Razorpay.
+            // Payment succeeded but the slot was taken while
+            // this patient was completing Razorpay checkout.
+            // Automatically issue a full refund.
+            try {
+                const temporaryAppointment = await Appointment.create({
+                    patient: req.user.id,
+                    doctor: doctorId,
+                    appointmentDate: new Date(appointmentDate),
+                    startTime,
+                    endTime,
+                    mode: mode || "Offline",
+                    reason,
+                    status: "Cancelled",
+                    paymentStatus: "Paid",
+                    paymentAmount: doctor.consultationFee,
+                    razorpayOrderId: razorpay_order_id,
+                    razorpayPaymentId: razorpay_payment_id,
+                    cancelledBy: "system"
+                });
+
+                await refundAppointmentPayment(
+                    temporaryAppointment,
+                    100,
+                    "Slot became unavailable after successful payment"
+                );
+            } catch (refundError) {
+                console.error(
+                    "Automatic refund after slot conflict failed:",
+                    refundError
+                );
+            }
 
             return res.status(409).json({
-
                 success: false,
-
                 paymentSuccessful: true,
-
+                refundInitiated: true,
                 message:
-                    "Payment was successful, but this appointment slot is no longer available. Please contact support for a refund."
-
+                    "Payment was successful, but this appointment slot was no longer available. A full refund has been initiated."
             });
-
         }
 
 
@@ -392,7 +449,7 @@ const verifyPayment = async (req, res) => {
                     startTime,
 
                 endTime:
-                    startTime,
+                    endTime,
 
                 mode:
                     mode || "Offline",
@@ -450,13 +507,53 @@ const verifyPayment = async (req, res) => {
             error.code === 11000
         ) {
 
+            // Razorpay payment already succeeded, but MongoDB
+            // rejected the appointment because another active
+            // appointment won the slot race. Refund the payment.
+            try {
+                const doctor = await Doctor.findById(
+                    req.body.doctorId
+                );
+
+                const endTime = calculateEndTime(
+                    req.body.startTime,
+                    doctor?.slotDuration || 30
+                );
+
+                const temporaryAppointment = await Appointment.create({
+                    patient: req.user.id,
+                    doctor: req.body.doctorId,
+                    appointmentDate: new Date(req.body.appointmentDate),
+                    startTime: req.body.startTime,
+                    endTime,
+                    mode: req.body.mode || "Offline",
+                    reason: req.body.reason,
+                    status: "Cancelled",
+                    paymentStatus: "Paid",
+                    paymentAmount: doctor?.consultationFee || 0,
+                    razorpayOrderId: req.body.razorpay_order_id,
+                    razorpayPaymentId: req.body.razorpay_payment_id,
+                    cancelledBy: "system"
+                });
+
+                await refundAppointmentPayment(
+                    temporaryAppointment,
+                    100,
+                    "Slot became unavailable after successful payment"
+                );
+            } catch (refundError) {
+                console.error(
+                    "Automatic refund after duplicate booking failed:",
+                    refundError
+                );
+            }
+
             return res.status(409).json({
-
                 success: false,
-
+                paymentSuccessful: true,
+                refundInitiated: true,
                 message:
-                    "This appointment slot has already been booked"
-
+                    "Payment was successful, but the slot was already booked. A full refund has been initiated."
             });
 
         }

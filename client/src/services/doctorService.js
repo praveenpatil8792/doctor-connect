@@ -5,6 +5,7 @@ export const getAllDoctors = async ({
     specialization = "",
     page = 1,
     limit = 8,
+    sortBy = "default",
 } = {}) => {
 
     const response = await api.get("/doctor/all", {
@@ -13,6 +14,7 @@ export const getAllDoctors = async ({
             specialization,
             page,
             limit,
+            sortBy,
         },
     });
 
@@ -68,5 +70,15 @@ export const getDoctorSlots = async (doctorId, date) => {
         `/doctor/${doctorId}/slots?date=${date}`
     );
 
+    return response.data;
+};
+
+export const getDoctorProfile = async () => {
+    const response = await api.get("/doctor/profile");
+    return response.data;
+};
+
+export const updateHospitalLocation = async (locationData) => {
+    const response = await api.put("/doctor/location", locationData);
     return response.data;
 };

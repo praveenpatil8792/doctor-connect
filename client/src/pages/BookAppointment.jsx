@@ -89,6 +89,8 @@ export default function BookAppointment() {
 
     const [paymentError, setPaymentError] = useState("");
 
+    const [paymentConflict, setPaymentConflict] = useState(false);
+
     const [appointmentConfirmed, setAppointmentConfirmed] = useState(false);
 
     const [pendingAppointmentId, setPendingAppointmentId] = useState(null);
@@ -325,216 +327,225 @@ const handleSubmit = async (e) => {
         // Razorpay options
         // -------------------------------------------------
 
-        const options = {
 
-            key:
-                order.keyId,
+         const options = {
 
-            amount:
-                order.amount,
+             key:
+                 order.keyId,
 
-            currency:
-                order.currency,
+             amount:
+                 order.amount,
 
-            name:
-                "Doctor Connect",
+             currency:
+                 order.currency,
 
-            description:
-                "Doctor Consultation",
+             name:
+                 "Doctor Connect",
 
-            order_id:
-                order.orderId,
+             description:
+                 "Doctor Consultation",
 
-
-            // -------------------------------------------------
-            // PAYMENT SUCCESS
-            // -------------------------------------------------
-
-            handler:
-                async function (response) {
-
-                    try {
-
-                        const verification =
-                            await verifyPayment({
-
-                                razorpay_order_id:
-                                    response.razorpay_order_id,
-
-                                razorpay_payment_id:
-                                    response.razorpay_payment_id,
-
-                                razorpay_signature:
-                                    response.razorpay_signature,
-
-                                doctorId:
-                                    id,
-
-                                appointmentDate:
-                                    date,
-
-                                startTime:
-                                    selectedSlot,
-
-                                mode:
-                                    "Offline",
-
-                                reason:
-                                    reason.trim()
-
-                            });
+             order_id:
+                 order.orderId,
 
 
-                        if (!verification.success) {
+             // -------------------------------------------------
+             // PAYMENT SUCCESS
+             // -------------------------------------------------
 
-                            throw new Error(
-                                verification.message ||
-                                "Payment verification failed"
-                            );
+             handler:
+                 async function (response) {
 
-                        }
+                     try {
+
+                         const verification =
+                             await verifyPayment({
+
+                                 razorpay_order_id:
+                                     response.razorpay_order_id,
+
+                                 razorpay_payment_id:
+                                     response.razorpay_payment_id,
+
+                                 razorpay_signature:
+                                     response.razorpay_signature,
+
+                                 doctorId:
+                                     id,
+
+                                 appointmentDate:
+                                     date,
+
+                                 startTime:
+                                     selectedSlot,
+
+                                 mode:
+                                     "Offline",
+
+                                 reason:
+                                     reason.trim()
+
+                             });
 
 
-                        // -------------------------------------------------
-                        // PAYMENT + APPOINTMENT SUCCESS
-                        // -------------------------------------------------
+                         if (!verification.success) {
 
-                        setBooking(false);
+                             throw new Error(
+                                 verification.message ||
+                                 "Payment verification failed"
+                             );
 
-                        setAppointmentConfirmed(true);
+                         }
 
 
-                        // -------------------------------------------------
-                        // Redirect after 3 seconds
-                        // -------------------------------------------------
+                         // -------------------------------------------------
+                         // PAYMENT + APPOINTMENT SUCCESS
+                         // -------------------------------------------------
 
-                        setTimeout(() => {
+                         setBooking(false);
+
+                         setAppointmentConfirmed(true);
+
+
+                         // -------------------------------------------------
+                         // Redirect after 3 seconds
+                         // -------------------------------------------------
+
+                         setTimeout(() => {
 
                             navigate(
-                                "/appointments"
+                                 "/my-appointments",
+                                {
+                                     replace: true
+                                }
                             );
 
                         }, 3000);
 
 
-                    }
+                     }
 
-                    catch (error) {
+                     catch (error) {
 
                         console.error(
-                            "Payment verification error:",
-                            error
-                        );
+                             "Payment verification error:",
+                             error
+                         );
 
 
-                        setBooking(false);
+                         setBooking(false);
 
-                        setPaymentFailed(true);
+                         const responseData =
+                             error.response?.data;
 
+                         setPaymentConflict(
+                             responseData?.paymentSuccessful === true
+                         );
 
-                        setPaymentError(
-
-                            error.response
-                                ?.data
-                                ?.message ||
-
-                            error.message ||
-
-                            "Payment verification failed"
-
-                        );
-
-                    }
-
-                },
+                         setPaymentFailed(true);
 
 
-            // -------------------------------------------------
-            // PAYMENT FAILED
-            // -------------------------------------------------
+                         setPaymentError(
 
-            "payment.failed":
-                function (response) {
+                             responseData?.message ||
 
-                    console.error(
-                        "Razorpay payment failed:",
-                        response
-                    );
+                             error.message ||
 
+                             "Payment verification failed"
 
-                    setBooking(false);
+                         );
 
-                    setPaymentFailed(true);
+                     }
+
+                 },
 
 
-                    setPaymentError(
+             // -------------------------------------------------
+             // PAYMENT FAILED
+             // -------------------------------------------------
 
-                        response.error
-                            ?.description ||
+             "payment.failed":
+                 function (response) {
 
-                        "Payment failed. Please try again."
-
-                    );
-
-                },
-
-
-            // -------------------------------------------------
-            // PREFILL
-            // -------------------------------------------------
-
-            prefill: {
-
-                name:
-                    "",
-
-                email:
-                    "",
-
-                contact:
-                    ""
-
-            },
+                     console.error(
+                         "Razorpay payment failed:",
+                         response
+                     );
 
 
-            // -------------------------------------------------
-            // THEME
-            // -------------------------------------------------
+                     setBooking(false);
 
-            theme: {
-
-                color:
-                    "#2563eb"
-
-            },
+                     setPaymentFailed(true);
 
 
-            // -------------------------------------------------
-            // USER CLOSES RAZORPAY
-            // -------------------------------------------------
+                     setPaymentError(
 
-            modal: {
+                         response.error
+                             ?.description ||
 
-                ondismiss:
-                    function () {
+                         "Payment failed. Please try again."
 
-                        console.log(
-                            "Razorpay checkout cancelled"
-                        );
+                     );
+
+                 },
 
 
-                        setBooking(false);
+             // -------------------------------------------------
+             // PREFILL
+             // -------------------------------------------------
 
-                        setPaymentFailed(true);
+             prefill: {
+
+                 name:
+                     "",
+
+                 email:
+                     "",
+
+                 contact:
+                     ""
+
+             },
 
 
-                        setPaymentError(
-                            "Payment was cancelled. No appointment was booked."
-                        );
+             // -------------------------------------------------
+             // THEME
+             // -------------------------------------------------
 
-                    }
+             theme: {
 
-            }
+                 color:
+                     "#2563eb"
+
+             },
+
+
+             // -------------------------------------------------
+             // USER CLOSES RAZORPAY
+             // -------------------------------------------------
+
+             modal: {
+
+                 ondismiss:
+                     function () {
+
+                         console.log(
+                             "Razorpay checkout cancelled"
+                         );
+
+
+                         setBooking(false);
+
+                         setPaymentFailed(true);
+
+
+                         setPaymentError(
+                             "Payment was cancelled. No appointment was booked."
+                         );
+
+                     }
+
+             }
 
         };
 
@@ -636,8 +647,12 @@ if (paymentFailed) {
 
                 <div className="mx-auto mb-5 flex items-center justify-center w-16 h-16 rounded-full bg-red-100">
 
-                    <span className="text-3xl text-red-600">
-                        ✕
+                    <span className={`text-3xl ${
+                        paymentConflict
+                            ? "text-yellow-600"
+                            : "text-red-600"
+                    }`}>
+                        {paymentConflict ? "!" : "✕"}
                     </span>
 
                 </div>
@@ -647,7 +662,9 @@ if (paymentFailed) {
 
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">
 
-                    Payment Failed
+                    {paymentConflict
+                        ? "Payment Successful - Slot Unavailable"
+                        : "Payment Failed"}
 
                 </h2>
 
@@ -666,9 +683,9 @@ if (paymentFailed) {
 
                 <p className="text-sm text-gray-500 mb-6">
 
-                    No appointment was booked.
-                    Please select the slot again and
-                    try the payment again.
+                    {paymentConflict
+                        ? "Your payment succeeded, but the slot was no longer available. A full refund has been initiated automatically. Please select another slot."
+                        : "No appointment was booked. Please select the slot again and try the payment again."}
 
                 </p>
 
@@ -680,6 +697,8 @@ if (paymentFailed) {
                     onClick={() => {
 
                         setPaymentFailed(false);
+
+                        setPaymentConflict(false);
 
                         setPaymentError("");
 

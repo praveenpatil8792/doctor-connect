@@ -2,6 +2,7 @@ const Doctor = require("../models/Doctor");
 const User = require("../models/User");
 const cloudinary = require("../config/cloudinary");
 const Appointment = require("../models/Appointment");
+const geocodeHospital = require("../services/geocodeHospital");
 // const defaultAvailability = require("../constants/defaultAvailability");
 
 const defaultAvailability = [
@@ -372,6 +373,54 @@ const uploadProfilePhoto = async (req, res) => {
 
 };
 
+// Update Hospital Location
+
+const updateHospitalLocation = async (req, res) => {
+    try {
+        const { hospital, address, city, state, pincode } = req.body;
+
+        if (!address || !city || !state || !pincode) {
+            return res.status(400).json({
+                success: false,
+                message: "Hospital name, address, city, state and PIN code are required"
+            });
+        }
+
+        const coordinates = await geocodeHospital({
+            hospital, address, city, state, pincode
+        });
+
+        const doctor = await Doctor.findOneAndUpdate(
+            { user: req.user.id },
+            {
+                hospital,
+                location: {
+                    address, city, state, pincode,
+                    latitude: coordinates.latitude,
+                    longitude: coordinates.longitude
+                }
+            },
+            { new: true, runValidators: true }
+        ).populate("user", "name email phone profileImage");
+
+        if (!doctor) {
+            return res.status(404).json({ success: false, message: "Doctor profile not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Hospital location saved successfully",
+            doctor
+        });
+    } catch (error) {
+        console.error("Update Hospital Location Error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Unable to locate hospital address"
+        });
+    }
+};
+
 // Get All Doctors
 
 const getAllDoctors = async (req, res) => {
@@ -384,6 +433,7 @@ const getAllDoctors = async (req, res) => {
 
         const search = req.query.search || "";
         const specialization = req.query.specialization || "";
+        const sortBy = req.query.sortBy || "default";
 
         // Build filter object
         let filter = {};
@@ -405,6 +455,34 @@ const getAllDoctors = async (req, res) => {
                 doctor.user.name
                     .toLowerCase()
                     .includes(search.toLowerCase())
+            );
+        }
+
+        // Apply rating/fee sorting before pagination so the user gets the
+        // correctly ranked doctors across the complete result set.
+        if (sortBy === "ratingDesc") {
+            doctors.sort(
+                (a, b) =>
+                    Number(b.averageRating || 0) -
+                    Number(a.averageRating || 0)
+            );
+        } else if (sortBy === "ratingAsc") {
+            doctors.sort(
+                (a, b) =>
+                    Number(a.averageRating || 0) -
+                    Number(b.averageRating || 0)
+            );
+        } else if (sortBy === "feeAsc") {
+            doctors.sort(
+                (a, b) =>
+                    Number(a.consultationFee || 0) -
+                    Number(b.consultationFee || 0)
+            );
+        } else if (sortBy === "feeDesc") {
+            doctors.sort(
+                (a, b) =>
+                    Number(b.consultationFee || 0) -
+                    Number(a.consultationFee || 0)
             );
         }
 
@@ -1138,6 +1216,7 @@ module.exports = {
     getAvailability,
     updateAvailability,
     uploadProfilePhoto,
-    getDoctorSlots
+    getDoctorSlots,
+    updateHospitalLocation
     
 };
