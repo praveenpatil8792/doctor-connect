@@ -784,7 +784,7 @@ const getDoctorAppointments = async (req, res) => {
         )
         .populate(
              "doctor",
-             "specialization consultationFee"
+             "specialization consultationFee offlineConsultationFee onlineConsultationFee"
         )
         .sort({
              appointmentDate: -1

@@ -61,27 +61,30 @@ export default function DoctorEarnings() {
         );
 
 
-    // Doctor consultation fee
-    const consultationFee =
-        completedAppointments.length > 0 &&
-        completedAppointments[0].doctor?.consultationFee
-            ? completedAppointments[0].doctor.consultationFee
-            : 0;
+    // Use the fee for the mode of each completed appointment.
+    const getAppointmentEarning = (appointment) => {
+
+        if (appointment.mode === "Online") {
+            return Number(appointment.doctor?.onlineConsultationFee || 0);
+        }
+
+        return Number(appointment.doctor?.offlineConsultationFee || 0);
+    };
 
 
-    const totalEarnings =
-        completedAppointments.reduce(
-            (total, appointment) => {
+    const totalEarnings = completedAppointments.reduce(
+        (total, appointment) => total + getAppointmentEarning(appointment),
+        0
+    );
 
-                return total +
-                    (
-                        appointment.doctor
-                            ?.consultationFee || 0
-                    );
 
-            },
-            0
-        );
+    const offlineFee = Number(
+        completedAppointments[0]?.doctor?.offlineConsultationFee || 0
+    );
+
+    const onlineFee = Number(
+        completedAppointments[0]?.doctor?.onlineConsultationFee || 0
+    );
 
 
     if (loading) {
@@ -163,15 +166,15 @@ export default function DoctorEarnings() {
                     <div className="bg-white shadow rounded-xl p-6">
 
                         <p className="text-gray-500">
-                            Consultation Fee
+                            Consultation Fees
                         </p>
 
                         <p className="text-3xl font-bold text-blue-600 mt-2">
 
                             ₹
-                            {consultationFee.toLocaleString(
-                                "en-IN"
-                            )}
+                            Offline: ₹{offlineFee.toLocaleString("en-IN")}
+                            <br />
+                            Online: ₹{onlineFee.toLocaleString("en-IN")}
 
                         </p>
 
@@ -219,6 +222,10 @@ export default function DoctorEarnings() {
 
                                         <th className="text-left p-3">
                                             Time
+                                        </th>
+
+                                        <th className="text-left p-3">
+                                            Mode
                                         </th>
 
                                         <th className="text-left p-3">
@@ -271,15 +278,12 @@ export default function DoctorEarnings() {
                                                 </td>
 
 
+                                                <td className="p-3">
+                                                    {appointment.mode || "Offline"}
+                                                </td>
+
                                                 <td className="p-3 font-semibold text-green-600">
-
-                                                    ₹
-                                                    {
-                                                        appointment
-                                                            .doctor
-                                                            ?.consultationFee || 0
-                                                    }
-
+                                                    ₹{getAppointmentEarning(appointment).toLocaleString("en-IN")}
                                                 </td>
 
                                             </tr>

@@ -20,6 +20,8 @@ import MyReviews from "../pages/MyReviews";
 import DoctorReviews from "../pages/DoctorReviews";
 import DoctorEarnings from "../pages/DoctorEarnings";
 import DoctorLocation from "../pages/DoctorLocation";
+import OnlineMeeting from "../pages/OnlineMeeting";
+import DoctorProfile from "../pages/DoctorProfile";
 
 export default function AppRoutes() {
     return (
@@ -28,10 +30,21 @@ export default function AppRoutes() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/doctors" element={<Doctors />} />
+            {/* Public doctor details page. Required by DoctorCard View Details links. */}
+            <Route path="/doctor/:id" element={<DoctorDetails />} />
             <Route
-                 path="/doctor/:id"
-                 element={<DoctorDetails />}
-            />
+                 element={
+                    <ProtectedRoute
+                       allowedRoles={["patient", "doctor"]}
+                    />
+                }
+            >
+                <Route
+                    path="/online-meeting/:appointmentId"
+                    element={<OnlineMeeting />}
+                />
+            </Route>
+
             <Route
                  element={
                     <ProtectedRoute
@@ -71,6 +84,10 @@ export default function AppRoutes() {
                       />
                 }
             >
+            <Route
+                  path="/doctor/profile"
+                  element={<DoctorProfile />}
+            />
             <Route
                   path="/doctor/dashboard"
                   element={<DoctorDashboard />}

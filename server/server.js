@@ -38,6 +38,11 @@ app.use(
     require("./routes/paymentRoutes")
 );
 
+app.use(
+    "/api/meeting",
+    require("./routes/meetingRoutes")
+);
+
 app.get("/", (req, res) => {
     res.send("Doctor Connect API Running...");
 });

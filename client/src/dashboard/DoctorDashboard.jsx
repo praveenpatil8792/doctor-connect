@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 
 import {
@@ -358,6 +359,22 @@ export default function DoctorDashboard() {
                                         }
                                         </button>
 
+                                        )}
+
+
+                                        {/* =========================
+                                            ONLINE MEETING
+                                        ========================= */}
+
+                                        {appointment.mode === "Online" &&
+                                            appointment.status === "Accepted" &&
+                                            appointment.paymentStatus === "Paid" && (
+                                            <Link
+                                                to={`/online-meeting/${appointment._id}`}
+                                                className="bg-green-600 text-white px-3 py-1 rounded"
+                                            >
+                                                🎥 Join Video Call
+                                            </Link>
                                         )}
 
 

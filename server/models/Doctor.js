@@ -10,22 +10,47 @@ const doctorSchema = new mongoose.Schema(
 
     specialization: {
         type: String,
-        required: true
+        default: ""
     },
 
     qualification: {
         type: String,
-        required: true
+        default: ""
     },
 
     experience: {
         type: Number,
-        required: true
+        default: 0,
+        min: 0
     },
 
     consultationFee: {
         type: Number,
         required: true
+    },
+
+    // Legacy/general consultation fee kept for backward compatibility.
+    // Offline/online booking now uses the two explicit fees below.
+    offlineConsultationFee: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+
+    onlineConsultationFee: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+
+    offlineAppointmentsEnabled: {
+        type: Boolean,
+        default: true
+    },
+
+    onlineAppointmentsEnabled: {
+        type: Boolean,
+        default: true
     },
 
     hospital: {
@@ -42,7 +67,13 @@ const doctorSchema = new mongoose.Schema(
     },
 
     about: {
-        type: String
+        type: String,
+        default: ""
+    },
+
+    nativeAddress: {
+        type: String,
+        default: ""
     },
 
     profilePhoto: {
@@ -82,9 +113,27 @@ const doctorSchema = new mongoose.Schema(
                         required: true
                     }
                 }
-            ]
+            ],
+
+            // Slots explicitly removed by the doctor for this weekly schedule.
+            excludedSlots: {
+                type: [String],
+                default: []
+            },
+
+            holiday: {
+                type: Boolean,
+                default: false
+            }
         }
     ],
+
+    // The Monday of the week for which the doctor last saved availability.
+    // Patient booking is intentionally limited to this week only.
+    availabilityWeekStart: {
+        type: String,
+        default: ""
+    },
 
     slotDuration: {
         type: Number,

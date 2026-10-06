@@ -1,84 +1,11 @@
 import api from "../api/axios";
-
-export const getAllDoctors = async ({
-    search = "",
-    specialization = "",
-    page = 1,
-    limit = 8,
-    sortBy = "default",
-} = {}) => {
-
-    const response = await api.get("/doctor/all", {
-        params: {
-            search,
-            specialization,
-            page,
-            limit,
-            sortBy,
-        },
-    });
-
-    return response.data;
-};
-
-export const getDoctorById = async (id) => {
-
-    const response = await api.get(`/doctor/${id}`);
-
-    return response.data;
-};
-
-export const getAvailability = async () => {
-
-    const response = await api.get(
-        "/doctor/availability"
-    );
-
-    return response.data;
-};
-
-export const updateAvailability = async (
-    availability
-) => {
-
-    const response = await api.put(
-        "/doctor/availability",
-        { availability }
-    );
-
-    return response.data;
-};
-
-// export const getDoctorSlots = async (
-//     doctorId,
-//     date
-// ) => {
-
-//     const response = await api.get(
-//         `/doctor/${doctorId}/slots`,
-//         {
-//             params:{ date }
-//         }
-//     );
-
-//     return response.data;
-
-// };
-
-export const getDoctorSlots = async (doctorId, date) => {
-    const response = await api.get(
-        `/doctor/${doctorId}/slots?date=${date}`
-    );
-
-    return response.data;
-};
-
-export const getDoctorProfile = async () => {
-    const response = await api.get("/doctor/profile");
-    return response.data;
-};
-
-export const updateHospitalLocation = async (locationData) => {
-    const response = await api.put("/doctor/location", locationData);
-    return response.data;
-};
+export const getAllDoctors = async ({search="",specialization="",page=1,limit=8,sortBy="default"}={}) => (await api.get("/doctor/all",{params:{search,specialization,page,limit,sortBy}})).data;
+export const getDoctorById = async (id) => (await api.get(`/doctor/${id}`)).data;
+export const getAvailability = async () => (await api.get("/doctor/availability")).data;
+export const generateAvailabilitySlots = async (openingTime, closingTime, slotDuration) => (await api.post("/doctor/availability/generate-slots", { openingTime, closingTime, slotDuration })).data;
+export const updateAvailability = async (availability,slotDuration,availabilityWeekStart) => (await api.put("/doctor/availability",{availability,slotDuration,availabilityWeekStart})).data;
+export const getDoctorSlots = async (doctorId,date) => (await api.get(`/doctor/${doctorId}/slots?date=${date}`)).data;
+export const getDoctorProfile = async () => (await api.get("/doctor/profile")).data;
+export const updateDoctorProfile = async (profileData) => (await api.put("/doctor/update-profile",profileData)).data;
+export const uploadDoctorProfilePhoto = async (file) => { const formData=new FormData(); formData.append("profileImage",file); return (await api.put("/doctor/upload-photo",formData,{headers:{"Content-Type":"multipart/form-data"}})).data; };
+export const updateHospitalLocation = async (locationData) => (await api.put("/doctor/location",locationData)).data;

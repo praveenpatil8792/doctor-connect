@@ -146,6 +146,28 @@ const appointmentSchema = new mongoose.Schema(
         razorpayPaymentId: {
              type: String,
              default: ""
+        },
+
+        // Online consultation meeting information.
+        meetingRoom: {
+            type: String,
+            default: ""
+        },
+
+        meetingStatus: {
+            type: String,
+            enum: [
+                "Not Required",
+                "Scheduled",
+                "Started",
+                "Completed"
+            ],
+            default: "Not Required"
+        },
+
+        meetingStartedAt: {
+            type: Date,
+            default: null
         }
 
     },

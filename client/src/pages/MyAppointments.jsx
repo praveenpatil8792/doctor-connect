@@ -1239,6 +1239,24 @@ export default function MyAppointments() {
 
 
                                             {/* =============================
+                                                ONLINE MEETING
+                                            ============================== */}
+
+                                            {appointment.mode === "Online" &&
+                                                appointment.status === "Accepted" &&
+                                                appointment.paymentStatus === "Paid" && (
+
+                                                <Link
+                                                    to={`/online-meeting/${appointment._id}`}
+                                                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                                                >
+                                                    🎥 Join Video Call
+                                                </Link>
+
+                                            )}
+
+
+                                            {/* =============================
                                                 REVIEW
                                                 ONLY COMPLETED
                                             ============================== */}

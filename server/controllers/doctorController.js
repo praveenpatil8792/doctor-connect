@@ -164,6 +164,14 @@ const createDoctorProfile = async (req, res) => {
 
             consultationFee,
 
+            offlineConsultationFee: Number(consultationFee),
+
+            onlineConsultationFee: Number(consultationFee),
+
+            offlineAppointmentsEnabled: true,
+
+            onlineAppointmentsEnabled: true,
+
             hospital,
 
             about,
@@ -243,57 +251,54 @@ const getDoctorProfile = async (req, res) => {
 // Update Doctor Profile
 
 const updateDoctorProfile = async (req, res) => {
-
     try {
+        const { name, email, phone, specialization, qualification, experience, nativeAddress, about, onlineConsultationFee, offlineConsultationFee, onlineAppointmentsEnabled, offlineAppointmentsEnabled } = req.body;
 
-        const doctor = await Doctor.findOneAndUpdate(
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-            {
-                user: req.user.id
-            },
-
-            req.body,
-
-            {
-                new: true,
-                runValidators: true
-            }
-
-        ).populate(
-            "user",
-            "name email phone profileImage"
-        );
-
-        if (!doctor) {
-
-            return res.status(404).json({
-                success: false,
-                message: "Doctor profile not found"
-            });
-
+        if (email && email.toLowerCase() !== user.email.toLowerCase()) {
+            const existing = await User.findOne({ email: email.toLowerCase(), _id: { $ne: user._id } });
+            if (existing) return res.status(409).json({ success: false, message: "Email is already in use" });
+            user.email = email.toLowerCase();
         }
+        if (name !== undefined) user.name = name;
+        if (phone !== undefined) user.phone = phone;
+        await user.save();
 
-        res.status(200).json({
+        const doctor = await Doctor.findOne({ user: req.user.id });
+        if (!doctor) return res.status(404).json({ success: false, message: "Doctor profile not found" });
 
-            success: true,
-            message: "Doctor Profile Updated",
+        if (specialization !== undefined) doctor.specialization = specialization;
+        if (qualification !== undefined) doctor.qualification = qualification;
+        if (experience !== undefined && experience !== null && experience !== "") {
+            const value = Number(experience);
+            if (!Number.isFinite(value) || value < 0) return res.status(400).json({ success: false, message: "Experience must be a valid non-negative number" });
+            doctor.experience = value;
+        }
+        if (nativeAddress !== undefined) doctor.nativeAddress = nativeAddress;
+        if (about !== undefined) doctor.about = about;
 
-            doctor
+        if (offlineConsultationFee !== undefined) {
+            const value = Number(offlineConsultationFee);
+            if (!Number.isFinite(value) || value < 0) return res.status(400).json({ success: false, message: "Offline consultation fee must be a valid non-negative number" });
+            doctor.offlineConsultationFee = value;
+            doctor.consultationFee = value;
+        }
+        if (onlineConsultationFee !== undefined) {
+            const value = Number(onlineConsultationFee);
+            if (!Number.isFinite(value) || value < 0) return res.status(400).json({ success: false, message: "Online consultation fee must be a valid non-negative number" });
+            doctor.onlineConsultationFee = value;
+        }
+        if (offlineAppointmentsEnabled !== undefined) doctor.offlineAppointmentsEnabled = Boolean(offlineAppointmentsEnabled);
+        if (onlineAppointmentsEnabled !== undefined) doctor.onlineAppointmentsEnabled = Boolean(onlineAppointmentsEnabled);
 
-        });
-
+        await doctor.save();
+        await doctor.populate("user", "name email phone profileImage");
+        return res.status(200).json({ success: true, message: "Doctor Profile Updated", doctor });
     } catch (error) {
-
-        res.status(500).json({
-
-            success: false,
-
-            message: error.message
-
-        });
-
+        return res.status(500).json({ success: false, message: error.message });
     }
-
 };
 
 // Upload Doctor Profile Photo
@@ -585,85 +590,175 @@ const deleteDoctorProfile = async (req, res) => {
 
 };
 
-// Update Doctor Availability
+// Convert HH:mm to minutes.
+const timeToMinutes = (value) => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value || "")) return null;
+    const [hour, minute] = value.split(":").map(Number);
+    return hour * 60 + minute;
+};
 
-const updateAvailability = async (req, res) => {
+const minutesToTime = (minutes) => {
+    const hour = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+};
 
+const getCurrentWeekMonday = () => {
+    const today = new Date();
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const day = date.getDay(); // Sunday = 0
+    const diff = day === 0 ? -6 : 1 - day;
+    date.setDate(date.getDate() + diff);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const getMondayForDate = (dateString) => {
+    const [year, month, day] = dateString.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    const dayOfWeek = date.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    date.setDate(date.getDate() + diff);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+// Backend slot generation used by the doctor's Confirm button.
+const generateAvailabilitySlots = async (req, res) => {
     try {
+        const { openingTime, closingTime, slotDuration } = req.body;
+        const start = timeToMinutes(openingTime);
+        const end = timeToMinutes(closingTime);
+        const duration = Number(slotDuration);
 
-        const { availability, slotDuration } = req.body;
-
-        const doctor = await Doctor.findOne({
-            user: req.user.id
-        });
-
-        if (!doctor) {
-
-            return res.status(404).json({
-                success: false,
-                message: "Doctor profile not found"
-            });
-
+        if (start === null || end === null) {
+            return res.status(400).json({ success: false, message: "Opening and closing times must be valid times." });
         }
 
-        doctor.availability = availability;
+        if (start >= end) {
+            return res.status(400).json({ success: false, message: "Opening time must be earlier than closing time." });
+        }
 
-        doctor.slotDuration = slotDuration;
+        if (!Number.isInteger(duration) || duration < 5 || duration > 240) {
+            return res.status(400).json({ success: false, message: "Slot duration must be between 5 and 240 minutes." });
+        }
+
+        const slots = [];
+        for (let current = start; current + duration <= end; current += duration) {
+            slots.push({
+                startTime: minutesToTime(current),
+                endTime: minutesToTime(current + duration)
+            });
+        }
+
+        if (slots.length === 0) {
+            return res.status(400).json({ success: false, message: "The selected opening/closing time is shorter than one slot." });
+        }
+
+        return res.status(200).json({ success: true, slots });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Save the doctor's weekly schedule for the current calendar week.
+const updateAvailability = async (req, res) => {
+    try {
+        const {
+            availability,
+            slotDuration,
+            offlineConsultationFee,
+            onlineConsultationFee,
+            offlineAppointmentsEnabled,
+            onlineAppointmentsEnabled,
+            availabilityWeekStart
+        } = req.body;
+
+        const doctor = await Doctor.findOne({ user: req.user.id });
+        if (!doctor) return res.status(404).json({ success: false, message: "Doctor profile not found" });
+
+        const duration = Number(slotDuration);
+        if (!Number.isInteger(duration) || duration < 5 || duration > 240) {
+            return res.status(400).json({ success: false, message: "Slot duration must be between 5 and 240 minutes." });
+        }
+
+        if (!Array.isArray(availability)) {
+            return res.status(400).json({ success: false, message: "Availability must be an array." });
+        }
+
+        const validDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const normalizedAvailability = validDays.map((day) => {
+            const item = availability.find((entry) => entry.day === day) || {};
+            const holiday = Boolean(item.holiday);
+            const sessions = Array.isArray(item.sessions) ? item.sessions : [];
+            const excludedSlots = Array.isArray(item.excludedSlots) ? item.excludedSlots : [];
+
+            if (holiday) return { day, sessions: [], excludedSlots: [], holiday: true };
+            if (sessions.length > 1) {
+                return { day, sessions, excludedSlots, holiday: false };
+            }
+            return { day, sessions, excludedSlots, holiday: false };
+        });
+
+        for (const day of normalizedAvailability) {
+            for (const session of day.sessions) {
+                const start = timeToMinutes(session.startTime);
+                const end = timeToMinutes(session.endTime);
+                if (start === null || end === null || start >= end) {
+                    return res.status(400).json({ success: false, message: `${day.day}: opening time must be earlier than closing time.` });
+                }
+                if (end - start < duration) {
+                    return res.status(400).json({ success: false, message: `${day.day}: working hours must contain at least one complete slot.` });
+                }
+            }
+        }
+
+        doctor.availability = normalizedAvailability;
+        doctor.slotDuration = duration;
+        doctor.availabilityWeekStart = availabilityWeekStart || getCurrentWeekMonday();
+
+        if (offlineConsultationFee !== undefined) {
+            const value = Number(offlineConsultationFee);
+            if (!Number.isFinite(value) || value < 0) return res.status(400).json({ success: false, message: "Offline consultation fee must be a valid non-negative number" });
+            doctor.offlineConsultationFee = value;
+            doctor.consultationFee = value;
+        }
+        if (onlineConsultationFee !== undefined) {
+            const value = Number(onlineConsultationFee);
+            if (!Number.isFinite(value) || value < 0) return res.status(400).json({ success: false, message: "Online consultation fee must be a valid non-negative number" });
+            doctor.onlineConsultationFee = value;
+        }
+        if (offlineAppointmentsEnabled !== undefined) doctor.offlineAppointmentsEnabled = Boolean(offlineAppointmentsEnabled);
+        if (onlineAppointmentsEnabled !== undefined) doctor.onlineAppointmentsEnabled = Boolean(onlineAppointmentsEnabled);
 
         await doctor.save();
 
-        res.status(200).json({
-
+        return res.status(200).json({
             success: true,
-
-            message: "Availability Updated",
-
-            doctor
-
+            message: "Availability and appointment slots saved successfully",
+            doctor,
+            availabilityWeekStart: doctor.availabilityWeekStart
         });
-
     } catch (error) {
-
-        res.status(500).json({
-
-            success: false,
-
-            message: error.message
-
-        });
-
+        return res.status(500).json({ success: false, message: error.message });
     }
-
 };
 
 const getAvailability = async (req, res) => {
-
     try {
+        const doctor = await Doctor.findOne({ user: req.user.id });
+        if (!doctor) return res.status(404).json({ success: false, message: "Doctor profile not found" });
 
-        const doctor = await Doctor.findOne({
-            user: req.user.id
-        });
-
-        if (!doctor) {
-            return res.status(404).json({
-                success: false,
-                message: "Doctor profile not found"
-            });
-        }
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-            availability: doctor.availability,
-            slotDuration: doctor.slotDuration
+            availability: doctor.availability || [],
+            availabilityWeekStart: doctor.availabilityWeekStart || "",
+            slotDuration: doctor.slotDuration,
+            offlineConsultationFee: Number(doctor.offlineConsultationFee || doctor.consultationFee || 0),
+            onlineConsultationFee: Number(doctor.onlineConsultationFee || doctor.consultationFee || 0),
+            offlineAppointmentsEnabled: doctor.offlineAppointmentsEnabled !== false,
+            onlineAppointmentsEnabled: doctor.onlineAppointmentsEnabled !== false
         });
-
     } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-
+        return res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -859,6 +954,19 @@ const getDoctorSlots = async (req, res) => {
                 }
             );
 
+        // Doctors configure only the current calendar week. Once the week changes,
+        // the previous schedule is no longer bookable until the doctor saves a new week.
+        const requestedWeekStart = getMondayForDate(date);
+        if (!doctor.availabilityWeekStart || doctor.availabilityWeekStart !== requestedWeekStart) {
+            return res.status(200).json({
+                success: true,
+                date,
+                day: dayName,
+                slots: [],
+                message: "Doctor has not published availability for this week."
+            });
+        }
+
 
         // =====================================================
         // 8. Find availability for selected day
@@ -872,6 +980,16 @@ const getDoctorSlots = async (req, res) => {
 
             );
 
+
+        if (dayAvailability && dayAvailability.holiday) {
+            return res.status(200).json({
+                success: true,
+                date,
+                day: dayName,
+                slots: [],
+                message: `Doctor is on holiday on ${dayName}`
+            });
+        }
 
         if (!dayAvailability) {
 
@@ -1021,6 +1139,12 @@ const getDoctorSlots = async (req, res) => {
         slots = [
             ...new Set(slots)
         ];
+
+        const excludedSlots = Array.isArray(dayAvailability.excludedSlots)
+            ? dayAvailability.excludedSlots
+            : [];
+
+        slots = slots.filter((slot) => !excludedSlots.includes(slot));
 
 
         // =====================================================
@@ -1214,6 +1338,7 @@ module.exports = {
     getDoctorById,
     deleteDoctorProfile,
     getAvailability,
+    generateAvailabilitySlots,
     updateAvailability,
     uploadProfilePhoto,
     getDoctorSlots,

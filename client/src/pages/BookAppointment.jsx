@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import { bookAppointment } from "../services/appointmentService";
-import { getDoctorSlots } from "../services/doctorService";
+import {
+    getDoctorById,
+    getDoctorSlots
+} from "../services/doctorService";
 import { useNavigate } from "react-router-dom";
 import {
     createPaymentOrder,
@@ -73,9 +76,13 @@ export default function BookAppointment() {
 
     const { id } = useParams();
 
+    const [doctor, setDoctor] = useState(null);
+
     const [date, setDate] = useState("");
 
     const [slots, setSlots] = useState([]);
+
+    const [mode, setMode] = useState("Offline");
 
     const [selectedSlot, setSelectedSlot] = useState("");
 
@@ -94,6 +101,27 @@ export default function BookAppointment() {
     const [appointmentConfirmed, setAppointmentConfirmed] = useState(false);
 
     const [pendingAppointmentId, setPendingAppointmentId] = useState(null);
+
+
+    useEffect(() => {
+        loadDoctor();
+    }, [id]);
+
+
+    const loadDoctor = async () => {
+        try {
+            const data = await getDoctorById(id);
+            setDoctor(data.doctor);
+
+            if (data.doctor?.onlineAppointmentsEnabled !== false) {
+                setMode("Offline");
+            } else {
+                setMode("Online");
+            }
+        } catch (error) {
+            console.error("Error loading doctor:", error);
+        }
+    };
 
 
     // =====================================================
@@ -227,6 +255,23 @@ export default function BookAppointment() {
 // HANDLE BOOKING + PAYMENT
 // =====================================================
 
+const offlineEnabled = doctor?.offlineAppointmentsEnabled !== false;
+const onlineEnabled = doctor?.onlineAppointmentsEnabled !== false;
+
+const offlineFee = Number(
+    doctor?.offlineConsultationFee ||
+    doctor?.consultationFee ||
+    0
+);
+
+const onlineFee = Number(
+    doctor?.onlineConsultationFee ||
+    doctor?.consultationFee ||
+    0
+);
+
+const selectedFee = mode === "Online" ? onlineFee : offlineFee;
+
 const handleSubmit = async (e) => {
 
     e.preventDefault();
@@ -296,7 +341,7 @@ const handleSubmit = async (e) => {
                     selectedSlot,
 
                 mode:
-                    "Offline",
+                    mode,
 
                 reason:
                     reason.trim()
@@ -380,7 +425,7 @@ const handleSubmit = async (e) => {
                                      selectedSlot,
 
                                  mode:
-                                     "Offline",
+                                     mode,
 
                                  reason:
                                      reason.trim()
@@ -961,6 +1006,79 @@ if (paymentFailed) {
 
 
                     {/* =================================
+                        APPOINTMENT MODE
+                    ================================= */}
+
+                    <div>
+
+                        <h2 className="font-semibold mb-4">
+                            Consultation Mode
+                        </h2>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                            {offlineEnabled && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMode("Offline")}
+                                    className={`text-left border rounded-xl p-5 transition ${
+                                        mode === "Offline"
+                                            ? "border-blue-600 bg-blue-50 ring-2 ring-blue-200"
+                                            : "hover:bg-gray-50"
+                                    }`}
+                                >
+                                    <p className="font-semibold text-lg">
+                                        🏥 Offline
+                                    </p>
+                                    <p className="text-gray-500 text-sm mt-1">
+                                        Visit the doctor's hospital/clinic.
+                                    </p>
+                                    <p className="font-bold text-blue-600 text-xl mt-3">
+                                        ₹{offlineFee.toLocaleString("en-IN")}
+                                    </p>
+                                </button>
+                            )}
+
+                            {onlineEnabled && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMode("Online")}
+                                    className={`text-left border rounded-xl p-5 transition ${
+                                        mode === "Online"
+                                            ? "border-blue-600 bg-blue-50 ring-2 ring-blue-200"
+                                            : "hover:bg-gray-50"
+                                    }`}
+                                >
+                                    <p className="font-semibold text-lg">
+                                        💻 Online
+                                    </p>
+                                    <p className="text-gray-500 text-sm mt-1">
+                                        Join a secure video consultation.
+                                    </p>
+                                    <p className="font-bold text-blue-600 text-xl mt-3">
+                                        ₹{onlineFee.toLocaleString("en-IN")}
+                                    </p>
+                                </button>
+                            )}
+
+                        </div>
+
+                        {!offlineEnabled && !onlineEnabled && (
+                            <p className="text-red-600 mt-3">
+                                This doctor has currently disabled all appointment modes.
+                            </p>
+                        )}
+
+                        {mode === "Online" && onlineEnabled && (
+                            <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+                                Your video meeting link will become available after the doctor accepts the appointment.
+                            </div>
+                        )}
+
+                    </div>
+
+
+                    {/* =================================
                         REASON
                     ================================= */}
 
@@ -997,6 +1115,18 @@ if (paymentFailed) {
 
 
 
+                    <div className="bg-gray-50 rounded-lg p-4 border">
+                        <div className="flex justify-between gap-4">
+                            <span className="text-gray-600">
+                                {mode} consultation fee
+                            </span>
+                            <span className="font-bold text-lg">
+                                ₹{selectedFee.toLocaleString("en-IN")}
+                            </span>
+                        </div>
+                    </div>
+
+
                     {/* =================================
                         BOOK BUTTON
                     ================================= */}
@@ -1009,7 +1139,9 @@ if (paymentFailed) {
                             booking ||
                             !selectedSlot ||
                             !date ||
-                            date < today
+                            date < today ||
+                            !doctor ||
+                            (!offlineEnabled && !onlineEnabled)
                         }
 
                         className={`
@@ -1027,7 +1159,9 @@ if (paymentFailed) {
                                 booking ||
                                 !selectedSlot ||
                                 !date ||
-                                date < today
+                                date < today ||
+                                !doctor ||
+                                (!offlineEnabled && !onlineEnabled)
 
                                     ? "bg-gray-400 cursor-not-allowed"
 

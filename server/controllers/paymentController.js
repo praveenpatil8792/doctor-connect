@@ -20,6 +20,24 @@ const calculateEndTime = (startTime, slotDuration) => {
 
     return `${String(endHour).padStart(2, "0")}:${String(endMinute).padStart(2, "0")}`;
 };
+const getAppointmentModeConfig = (doctor, mode) => {
+
+    const selectedMode = mode === "Online" ? "Online" : "Offline";
+
+    const enabled = selectedMode === "Online"
+        ? doctor.onlineAppointmentsEnabled !== false
+        : doctor.offlineAppointmentsEnabled !== false;
+
+    const configuredFee = selectedMode === "Online"
+        ? doctor.onlineConsultationFee
+        : doctor.offlineConsultationFee;
+
+    const legacyFee = Number(doctor.consultationFee || 0);
+    const fee = Number(configuredFee || legacyFee);
+
+    return { selectedMode, enabled, fee };
+};
+
 
 
 // =====================================================
@@ -36,6 +54,8 @@ const createPaymentOrder = async (req, res) => {
             mode,
             reason
         } = req.body;
+
+        const selectedMode = mode === "Online" ? "Online" : "Offline";
 
 
         // -------------------------------------------------
@@ -70,17 +90,27 @@ const createPaymentOrder = async (req, res) => {
 
 
         // -------------------------------------------------
-        // Validate consultation fee
+        // Validate appointment mode and select its fee
         // -------------------------------------------------
 
-        const amount = Number(
-            doctor.consultationFee
+        const modeConfig = getAppointmentModeConfig(
+            doctor,
+            selectedMode
         );
+
+        if (!modeConfig.enabled) {
+            return res.status(400).json({
+                success: false,
+                message: `${selectedMode} appointments are currently disabled by this doctor`
+            });
+        }
+
+        const amount = modeConfig.fee;
 
         if (!amount || amount <= 0) {
             return res.status(400).json({
                 success: false,
-                message: "Doctor consultation fee is not configured"
+                message: `${selectedMode} consultation fee is not configured`
             });
         }
 
@@ -199,7 +229,7 @@ console.log("==================================");
             endTime,
 
             mode:
-                mode || "Offline",
+                selectedMode,
 
             reason
         });
@@ -346,6 +376,32 @@ const verifyPayment = async (req, res) => {
         }
 
 
+        // Resolve the appointment mode and fee again during verification.
+        // These variables are intentionally calculated here because the
+        // Razorpay payment is verified in a separate request from
+        // createPaymentOrder.
+        const modeConfig = getAppointmentModeConfig(
+            doctor,
+            mode
+        );
+
+        if (!modeConfig.enabled) {
+            return res.status(400).json({
+                success: false,
+                message: `${modeConfig.selectedMode} appointments are currently disabled by this doctor`
+            });
+        }
+
+        if (!modeConfig.fee || modeConfig.fee <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: `${modeConfig.selectedMode} consultation fee is not configured`
+            });
+        }
+
+        const selectedMode = modeConfig.selectedMode;
+
+
         const endTime = calculateEndTime(
             startTime,
             doctor.slotDuration
@@ -397,11 +453,11 @@ const verifyPayment = async (req, res) => {
                     appointmentDate: new Date(appointmentDate),
                     startTime,
                     endTime,
-                    mode: mode || "Offline",
+                    mode: selectedMode,
                     reason,
                     status: "Cancelled",
                     paymentStatus: "Paid",
-                    paymentAmount: doctor.consultationFee,
+                    paymentAmount: modeConfig.fee,
                     razorpayOrderId: razorpay_order_id,
                     razorpayPaymentId: razorpay_payment_id,
                     cancelledBy: "system"
@@ -452,7 +508,7 @@ const verifyPayment = async (req, res) => {
                     endTime,
 
                 mode:
-                    mode || "Offline",
+                    selectedMode,
 
                 reason:
                     reason,
@@ -464,15 +520,28 @@ const verifyPayment = async (req, res) => {
                     "Paid",
 
                 paymentAmount:
-                    doctor.consultationFee,
+                    modeConfig.fee,
 
                 razorpayOrderId:
                     razorpay_order_id,
 
                 razorpayPaymentId:
-                    razorpay_payment_id
+                    razorpay_payment_id,
+
+                meetingStatus:
+                    selectedMode === "Online"
+                        ? "Scheduled"
+                        : "Not Required"
 
             });
+
+
+        if (selectedMode === "Online") {
+            appointment.meetingRoom =
+                `doctor-connect-${appointment._id}-${crypto.randomBytes(6).toString("hex")}`;
+
+            await appointment.save();
+        }
 
 
         // -------------------------------------------------
@@ -515,6 +584,11 @@ const verifyPayment = async (req, res) => {
                     req.body.doctorId
                 );
 
+                const duplicateModeConfig = getAppointmentModeConfig(
+                    doctor,
+                    req.body.mode
+                );
+
                 const endTime = calculateEndTime(
                     req.body.startTime,
                     doctor?.slotDuration || 30
@@ -526,11 +600,11 @@ const verifyPayment = async (req, res) => {
                     appointmentDate: new Date(req.body.appointmentDate),
                     startTime: req.body.startTime,
                     endTime,
-                    mode: req.body.mode || "Offline",
+                    mode: duplicateModeConfig.selectedMode,
                     reason: req.body.reason,
                     status: "Cancelled",
                     paymentStatus: "Paid",
-                    paymentAmount: doctor?.consultationFee || 0,
+                    paymentAmount: duplicateModeConfig.fee || 0,
                     razorpayOrderId: req.body.razorpay_order_id,
                     razorpayPaymentId: req.body.razorpay_payment_id,
                     cancelledBy: "system"
